@@ -2708,7 +2708,7 @@ function App() {
     pushUndo("Add " + tier.name + " request");
     const r = { id:idRef.current++, tierName:tier.name, title:"", requester:"", details:"", date:"", time:"", segments:[], completed:false };
     setRequests(rs => [...rs, r]);
-    window._modalOpen = true; setEditingId(r.id);
+    openEditWithSnapshot(r);
     setAnimCard(tier.name);
     setTimeout(() => setAnimCard(null), 400);
   };
@@ -2723,21 +2723,25 @@ function App() {
     if (found) { pushUndo("Remove " + tier.name + " request"); setRequests(r => r.filter((_, i) => i !== found.i)); }
   };
 
-  const saveEdit = (id, data) => { pushUndo("Edit request"); setRequests(r => r.map(req => req.id===id ? Object.assign({}, req, data) : req)); window._modalOpen = false; setEditingId(null); };
+  const saveEdit = (id, data) => { pushUndo("Edit request"); setRequests(r => r.map(req => req.id===id ? Object.assign({}, req, data) : req)); clearEdit(); };
   const deleteRequest = (id) => { pushUndo("Delete request"); setRequests(r => r.filter(req => req.id !== id)); };
   const { confirm: confirmDeleteReq, modal: confirmDeleteModal } = useConfirm();
-  // Store a snapshot of the request when edit opens so Supabase polling
-  // can't wipe it mid-edit by replacing the requests array
+  // Snapshot ref — set immediately when opening edit, not via useEffect,
+  // so the modal always has data even before React re-renders with the new request
   const editingRequestRef = React.useRef(null);
-  React.useEffect(() => {
-    if (editingId !== null) {
-      const found = requests.find(r => r.id === editingId);
-      if (found) editingRequestRef.current = found;
-    } else {
-      editingRequestRef.current = null;
-    }
-  }, [editingId]);
-  const editingRequest = editingId !== null ? (editingRequestRef.current || requests.find(r => r.id === editingId)) : null;
+  const openEditWithSnapshot = (req) => {
+    editingRequestRef.current = req;
+    window._modalOpen = true;
+    setEditingId(req.id);
+  };
+  const clearEdit = () => {
+    editingRequestRef.current = null;
+    window._modalOpen = false;
+    setEditingId(null);
+  };
+  const editingRequest = editingId !== null
+    ? (editingRequestRef.current || requests.find(r => r.id === editingId) || null)
+    : null;
 
   const sharedStyle = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;600;700&display=swap');
@@ -3395,7 +3399,7 @@ function App() {
       <div style={{ position:"fixed", inset:0, background:"radial-gradient(ellipse at 50% 100%,#0a2010 0%,#040c04 60%)", pointerEvents:"none", zIndex:0 }} />
       <div style={{ position:"fixed", inset:0, backgroundImage:"linear-gradient(rgba(250,204,21,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(250,204,21,0.015) 1px,transparent 1px)", backgroundSize:"60px 60px", pointerEvents:"none", zIndex:0 }} />
 
-      {editingRequest && <Modal request={editingRequest} onSave={(data) => saveEdit(editingRequest.id, data)} onClose={() => setEditingId(null)} allRequests={requests} />}
+      {editingRequest && <Modal request={editingRequest} onSave={(data) => saveEdit(editingRequest.id, data)} onClose={() => clearEdit()} allRequests={requests} />}
       {confirmDeleteModal}
       {showShareCard && <ShareCard requests={requests} wheelRequests={wheelRequests} totalFunded={totalFunded} pct={pct} counts={counts} onClose={() => setShowShareCard(false)} goal={goal} />}
       {infoPage && <InfoPage tierName={infoPage} onClose={() => setInfoPage(null)} isAdmin={isAdmin} infoContent={infoContent} onSave={(tierName, newBody) => setInfoContent(c => Object.assign({}, c, { [tierName]: Object.assign({}, c[tierName], { body: newBody }) }))} onViewLibrary={() => { setInfoPage(null); setPage("library"); }} />}
@@ -3435,7 +3439,7 @@ function App() {
                 completed: true,
               };
               setRequests(rs => [...rs, newReq]);
-              window._modalOpen = false; setEditingId(null); // ensure no modal opens
+              clearEdit(); // ensure no modal opens
             } else {
               const tier = TIERS.find(t => t.name === tierName);
               const newReq = {
@@ -3465,9 +3469,9 @@ function App() {
                   addedAt: new Date().toLocaleDateString(),
                 }));
                 setWheelRequests(wr => [...wr, ...newSpins]);
-                window._modalOpen = false; setEditingId(null);
+                clearEdit();
               } else {
-                window._modalOpen = true; setEditingId(newReq.id);
+                openEditWithSnapshot(newReq);
               }
             }
             setDonationQueue(q => q.slice(1));
@@ -3829,7 +3833,7 @@ function App() {
                       completed: logDonationData.tierName === "NONE",
                     };
                     setRequests(rs => [...rs, req]);
-                    if (logDonationData.tierName !== "NONE") setEditingId(req.id);
+                    if (logDonationData.tierName !== "NONE") openEditWithSnapshot(req);
                     setLogDonationData({ donor:"", amount:"", message:"", tierName:"NONE" });
                     setLogDonationOpen(false);
                   }}
@@ -3949,7 +3953,7 @@ function App() {
                           </button>
                         )}
                         {isAdmin && (
-                          <button className="edit-btn" onClick={() => setEditingId(req.id)}
+                          <button className="edit-btn" onClick={() => openEditWithSnapshot(req)}
                             style={{ padding:"6px 14px", borderRadius:3, border:"1px solid #2a5a2a", background:"none", color:"#8fbb8f", fontFamily:S.barlow, fontSize:16, cursor:"pointer", flexShrink:0 }}>Edit</button>
                         )}
                         {isAdmin && (
