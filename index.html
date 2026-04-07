@@ -2601,7 +2601,8 @@ function App() {
 
     function applyData(d) {
       if (!d) return;
-      if (d.requests)         setRequests(d.requests);
+      // Don't overwrite requests while admin is editing — would clobber in-progress work
+      if (d.requests && !window._modalOpen) setRequests(d.requests);
       if (d.infoContent)      setInfoContent(function(c) { return Object.assign({}, c, d.infoContent); });
       if (d.gameLibrary)      setGameLibrary(d.gameLibrary);
       if (d.wheelRequests)    setWheelRequests(d.wheelRequests);
@@ -2625,7 +2626,14 @@ function App() {
           return merged;
         });
       }
-      if (d.idRefCurrent) idRef.current = d.idRefCurrent;
+      // Always set idRef to at least max(existing ids)+1 to prevent id collisions
+      var maxId = 0;
+      if (d.requests) d.requests.forEach(function(r) { if (r.id > maxId) maxId = r.id; });
+      if (d.idRefCurrent && d.idRefCurrent > maxId) {
+        idRef.current = d.idRefCurrent;
+      } else {
+        idRef.current = maxId + 1;
+      }
     }
 
     // Load state from Supabase (visible to all visitors instantly)
@@ -2706,7 +2714,7 @@ function App() {
       return;
     }
     pushUndo("Add " + tier.name + " request");
-    const r = { id:idRef.current++, tierName:tier.name, title:"", requester:"", details:"", date:"", time:"", segments:[], completed:false };
+    const r = { id: Date.now(), tierName:tier.name, title:"", requester:"", details:"", date:"", time:"", segments:[], completed:false };
     setRequests(rs => [...rs, r]);
     openEditWithSnapshot(r);
     setAnimCard(tier.name);
@@ -2844,7 +2852,13 @@ function App() {
             return merged;
           });
         }
-        if (d.idRefCurrent) idRef.current = d.idRefCurrent;
+        var maxId2 = 0;
+        if (d.requests) d.requests.forEach(function(r) { if (r.id > maxId2) maxId2 = r.id; });
+        if (d.idRefCurrent && d.idRefCurrent > maxId2) {
+          idRef.current = d.idRefCurrent;
+        } else {
+          idRef.current = maxId2 + 1;
+        }
         alert("✅ Data loaded successfully from " + (d.savedAt ? new Date(d.savedAt).toLocaleString() : "file"));
       } catch(err) {
         alert("❌ Failed to load file: " + err.message);
